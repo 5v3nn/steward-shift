@@ -12,6 +12,7 @@ dependencies = [
     "pulp>=3.3.0",
     "pyyaml>=6.0.3",
 ]
+classifiers = ["Private :: Do Not Upload"]
 
 [project.scripts]
 steward-shift = "steward_shift:main"
@@ -23,7 +24,6 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "black>=25.11.0",
-    "isort>=7.0.0",
     "pre-commit>=4.5.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",

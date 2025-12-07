@@ -23,7 +23,44 @@
 - not same person always mondays and not always fridays
 - If fridays, not monday
 - teamdays: members of a certain team should not have shift on that teamday
-  
-- output as csv  
-  - like a calendar 
+
+- output as csv
+  - like a calendar
   - modular, s.t. we can push to teams
+
+
+## Usage
+
+### Develpment
+
+```bash
+# Install in editable mode - changes to code are immediately reflected
+uv sync
+
+# Now you can use the CLI directly (no need for 'uv run')
+steward-shift config/schedule_config.yaml
+
+# Or with uv run (always works)
+uv run steward-shift config/schedule_config.yaml
+```
+
+
+### Build and install the package
+
+```bash
+# 1. Build the distribution files (wheel + source distribution)
+uv build
+
+# This creates:
+ls dist
+
+# 2. Install the wheel file
+uv pip install dist/steward_shift-0.1.0-py3-none-any.whl
+
+# Or install from the source distribution
+uv pip install dist/steward_shift-0.1.0.tar.gz
+
+# 3. Now use it anywhere
+steward-shift config/schedule_config.yaml
+steward-shift --help
+```
