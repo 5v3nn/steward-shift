@@ -1,0 +1,31 @@
+[project]
+name = "steward-shift"
+version = "0.1.0"
+description = "A shift scheduling planner help"
+readme = "README.md"
+authors = [
+    { name = "5v3nn" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pandas>=2.3.3",
+    "pulp>=3.3.0",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+steward-shift = "steward_shift:main"
+
+[build-system]
+requires = ["uv_build>=0.9.15,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "black>=25.11.0",
+    "isort>=7.0.0",
+    "pre-commit>=4.5.0",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "python-lsp-server[all]>=1.14.0",
+]
