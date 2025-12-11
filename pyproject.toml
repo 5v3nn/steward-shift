@@ -15,7 +15,7 @@ dependencies = [
 classifiers = ["Private :: Do Not Upload"]
 
 [project.scripts]
-steward-shift = "steward_shift:main"
+steward-shift = "steward_shift.main:main"
 
 [build-system]
 requires = ["uv_build>=0.9.15,<0.10.0"]
