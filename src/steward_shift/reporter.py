@@ -103,7 +103,7 @@ class ScheduleReporter:
                     "Actual Shifts": emp_sched.actual_shifts,
                     "Deviation": emp_sched.deviation,
                     "Max Consecutive": emp_sched.max_consecutive,
-                    "Violations (>3)": emp_sched.violations_count,
+                    f"Violations (>{self.result.config.max_consecutive_shifts})": emp_sched.violations_count,
                 }
             )
 
@@ -234,6 +234,8 @@ class ScheduleReporter:
         """
         violations = []
 
+        max_allowed = self.result.config.max_consecutive_shifts
+
         for emp_sched in self.result.employee_schedules:
             emp_violations = []
             consecutive_count = 0
@@ -245,12 +247,12 @@ class ScheduleReporter:
                         start_day = k
                     consecutive_count += 1
                 else:
-                    if consecutive_count > 3:
+                    if consecutive_count > max_allowed:
                         emp_violations.append((start_day, k - 1, consecutive_count))
                     consecutive_count = 0
 
             # Check if violation extends to end of period
-            if consecutive_count > 3:
+            if consecutive_count > max_allowed:
                 emp_violations.append(
                     (start_day, self.result.config.total_days - 1, consecutive_count)
                 )

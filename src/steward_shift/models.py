@@ -88,6 +88,9 @@ class ScheduleConfig:
     employees: List[Employee]
     penalty_team_deviation: float = 10000
     penalty_consecutive_shifts: float = 50
+    max_consecutive_shifts: int = (
+        3  # Soft constraint: max consecutive days before penalty
+    )
 
     @property
     def total_days(self) -> int:
@@ -120,7 +123,7 @@ class EmployeeSchedule:
     ideal_shifts: float
     actual_shifts: int
     max_consecutive: int
-    violations_count: int  # Number of times worked >3 consecutive days
+    violations_count: int  # Number of times exceeded max consecutive shifts
 
     @property
     def deviation(self) -> float:

@@ -232,20 +232,18 @@ class ShiftOptimizer:
             )
 
     def _add_consecutive_shift_constraints(self, E, D) -> None:
-        """Add soft constraints for consecutive shifts (max 3)."""
+        """Add soft constraints for consecutive shifts."""
+        max_consec = self.config.max_consecutive_shifts
+        window = max_consec + 1  # Window size to detect violations
+
         for emp_name in E:
             for k in D:
-                if k + 3 < self.config.total_days:
-                    # If 4 consecutive shifts, C[i][k] must be 1
+                if k + max_consec < self.config.total_days:
+                    # If (max_consec + 1) consecutive shifts, C[i][k] must be 1
                     self.prob += (
                         self.C[emp_name][k]
-                        >= (
-                            self.x[emp_name][k]
-                            + self.x[emp_name][k + 1]
-                            + self.x[emp_name][k + 2]
-                            + self.x[emp_name][k + 3]
-                        )
-                        - 3,
+                        >= pl.lpSum(self.x[emp_name][k + j] for j in range(window))
+                        - max_consec,
                         f"ConsecutiveDetect_{emp_name}_Day_{k}",
                     )
 
@@ -285,6 +283,7 @@ class ShiftOptimizer:
 
         # Extract employee schedules
         employee_schedules = []
+        max_allowed = cfg.max_consecutive_shifts
 
         for emp in cfg.employees:
             assigned_days = [k for k in D if pl.value(self.x[emp.name][k]) == 1]
@@ -300,11 +299,11 @@ class ShiftOptimizer:
                     consecutive_count += 1
                     max_consecutive = max(max_consecutive, consecutive_count)
                 else:
-                    if consecutive_count > 3:
+                    if consecutive_count > max_allowed:
                         violations_count += 1
                     consecutive_count = 0
 
-            if consecutive_count > 3:
+            if consecutive_count > max_allowed:
                 violations_count += 1
 
             employee_schedules.append(

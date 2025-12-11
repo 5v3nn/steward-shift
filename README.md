@@ -12,9 +12,9 @@
   team B should do 33% of all shifts (these distributions should be variable).
 - The shifts should be distributed equally among all employees, according to
   the team membership.
-- It is not feasible for a person to do more than 3 shifts in a row. This is
-  modeled as a soft boundary.
-- We want to be able to plan for K month periods (e.g. K=3).
+- It is not feasible for a person to do more than `k` shifts in a row. This is
+  modeled as a soft boundary. `k` is set in the conifg file.
+- We want to be able to plan for a specified period of time. (set in config)
 
 
 
