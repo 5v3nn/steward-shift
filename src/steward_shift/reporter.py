@@ -52,7 +52,7 @@ class ScheduleReporter:
 
     def _print_failure_message(self) -> None:
         """Print message when optimization fails."""
-        print("\n⚠️  NO OPTIMAL SOLUTION FOUND!")
+        print("\nNO OPTIMAL SOLUTION FOUND!")
         print("\nPossible reasons:")
         print("  • Part-time availability conflicts with staffing requirements")
         print("  • Team distribution targets are impossible with current constraints")
@@ -217,7 +217,7 @@ class ScheduleReporter:
                 start_date = self.result.config.start_date + timedelta(days=start_day)
                 end_date = self.result.config.start_date + timedelta(days=end_day)
                 print(
-                    f"    ⚠  {count} consecutive shifts: "
+                    f"    {count} consecutive shifts: "
                     f"Day {start_day + 1} ({start_date.strftime('%a')}) to "
                     f"Day {end_day + 1} ({end_date.strftime('%a')})"
                 )

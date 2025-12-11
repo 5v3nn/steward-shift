@@ -73,11 +73,11 @@ Examples:
         sys.exit(0 if result.is_optimal else 1)
 
     except FileNotFoundError as e:
-        print(f"✕ Error: {e}", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     except InvalidDateFormatError as e:
-        print(f"✕ Date Format Error: {e}", file=sys.stderr)
+        print(f"Date Format Error: {e}", file=sys.stderr)
         print(
             "\n Tip: Use ISO 8601 format (YYYY-MM-DD) for all dates.", file=sys.stderr
         )
@@ -85,15 +85,15 @@ Examples:
         sys.exit(1)
 
     except ConfigurationError as e:
-        print(f"✕ Configuration Error: {e}", file=sys.stderr)
+        print(f"Configuration Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     except ValueError as e:
-        print(f"✕ Validation Error: {e}", file=sys.stderr)
+        print(f"Validation Error: {e}", file=sys.stderr)
         sys.exit(1)
 
     except Exception as e:
-        print(f"✕ Unexpected Error: {e}", file=sys.stderr)
+        print(f"Unexpected Error: {e}", file=sys.stderr)
         import traceback
 
         traceback.print_exc()
