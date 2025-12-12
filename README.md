@@ -1,4 +1,135 @@
-# Steward Shift - A Shift Scheduling Planner
+# Steward Shift
+
+A shift scheduling optimizer that uses linear programming (PuLP) to assign
+employees to shifts while respecting constraints like vacations, part-time
+schedules, team distributions, and consecutive shift limits.
+
+## Features
+
+- **Daily staffing requirements** - Configure different staffing needs per day
+  of week
+- **Fair distribution** - Shifts are distributed proportionally based on
+  availability and team distribution
+- **Team distribution targets** - Set percentage targets for how shifts are
+  split between teams
+- **Part-time support** - Employees can specify which days they're available
+- **Vacation handling** - Multiple vacation periods per employee, including
+  single-day vacations
+- **Team days** - Designate days when specific teams don't work (e.g. team has
+  a day in the week when they coordinate, thus should not be considered for the
+  shift)
+- **Consecutive shift limits** - Prevent too many shifts in a row
+- **CSV export** - Export schedules for calendar integration
+
+## Installation
+
+```bash
+# Install dependencies
+uv sync
+
+# Run the CLI
+steward-shift config/mgb_config.yaml
+```
+
+## Usage
+
+```bash
+# Full report with all details
+steward-shift config/schedule.yaml
+
+# Minimal output (schedule only)
+steward-shift config/schedule.yaml --quiet
+
+# Export to CSV
+steward-shift config/schedule.yaml --export-csv output.csv
+```
+
+## Configuration
+
+Configuration is done via YAML. See `config/mgb_config.yaml` for a complete example.
+
+```yaml
+planning:
+  start_date: 2026-01-01
+  duration_weeks: 12
+
+staffing_requirements:
+  monday: 3
+  tuesday: 2
+  wednesday: 2
+  thursday: 2
+  friday: 2
+  saturday: 0
+  sunday: 0
+
+teams:
+  Engineering:
+    target_percentage: 0.6
+    team_day: 2  # Wednesday - no Engineering staff works
+  Support:
+    target_percentage: 0.4
+    team_day: 3  # Thursday
+
+employees:
+  - name: Alice
+    team: Engineering
+    available_days: [0, 1, 2, 3, 4]  # Mon-Fri (full-time)
+    vacations:
+      - start: 2026-02-02
+        end: 2026-02-06
+  - name: Bob
+    team: Support
+    available_days: [0, 2, 4]  # Mon, Wed, Fri (part-time)
+
+penalties:
+  team_deviation: 10000  # High = near-hard constraint
+  consecutive_shifts: 50  # Moderate = soft constraint
+
+constraints:
+  max_consecutive_shifts: 3  # Penalize working more than 3 days in a row
+```
+
+### Key Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `planning.start_date` | ISO 8601 date (YYYY-MM-DD) |
+| `planning.duration_weeks` | Number of weeks to schedule |
+| `staffing_requirements` | People needed per day of week |
+| `teams.*.target_percentage` | Must sum to 1.0 |
+| `teams.*.team_day` | Day index (0=Mon, 6=Sun) when team doesn't work |
+| `employees.*.available_days` | List of day indices employee can work |
+| `constraints.max_consecutive_shifts` | Max consecutive days before penalty applies |
+
+## Development
+
+```bash
+# Install in editable mode
+uv sync
+
+# Run tests
+uv run pytest
+
+# Run single test
+uv run pytest tests/test_file.py::test_name
+
+# Build package
+uv build
+```
+
+## How It Works
+
+The optimizer uses PuLP to solve a linear programming problem that:
+
+1. **Minimizes** deviation from ideal shift distribution + team target penalties + consecutive shift penalties
+2. **Subject to:**
+   - Daily staffing requirements are met exactly
+   - Employees only assigned when available (respects part-time, vacations, team days)
+   - Team shift totals approximate target percentages
+
+---
+
+## Notes
 
 - For a shift we have a certain number of people we need to reach for a day
   (e.g. on monday 3 people meed to do that shift, rest of the week only 2
@@ -27,40 +158,3 @@
 - output as csv
   - like a calendar
   - modular, s.t. we can push to teams
-
-
-## Usage
-
-### Develpment
-
-```bash
-# Install in editable mode - changes to code are immediately reflected
-uv sync
-
-# Now you can use the CLI directly (no need for 'uv run')
-steward-shift config/schedule_config.yaml
-
-# Or with uv run (always works)
-uv run steward-shift config/schedule_config.yaml
-```
-
-
-### Build and install the package
-
-```bash
-# 1. Build the distribution files (wheel + source distribution)
-uv build
-
-# This creates:
-ls dist
-
-# 2. Install the wheel file
-uv pip install dist/steward_shift-0.1.0-py3-none-any.whl
-
-# Or install from the source distribution
-uv pip install dist/steward_shift-0.1.0.tar.gz
-
-# 3. Now use it anywhere
-steward-shift config/schedule_config.yaml
-steward-shift --help
-```
