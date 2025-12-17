@@ -88,9 +88,9 @@ class ScheduleConfig:
     employees: List[Employee]
     penalty_team_deviation: float = 10000
     penalty_consecutive_shifts: float = 50
-    max_consecutive_shifts: int = (
-        3  # Soft constraint: max consecutive days before penalty
-    )
+    penalty_weekly_shifts: float = 30  # Penalty for exceeding max shifts per week
+    max_consecutive_shifts: int = 3  # Max consecutive days before penalty
+    max_shifts_per_week: int = 1  # Ideal max shifts per week before penalty
 
     @property
     def total_days(self) -> int:
@@ -123,12 +123,19 @@ class EmployeeSchedule:
     ideal_shifts: float
     actual_shifts: int
     max_consecutive: int
-    violations_count: int  # Number of times exceeded max consecutive shifts
+    consecutive_violations: int  # Number of times exceeded max consecutive shifts
+    weekly_shifts: List[int]  # Shifts per week [week0, week1, ...]
+    weekly_violations: int  # Number of weeks exceeding max shifts per week
 
     @property
     def deviation(self) -> float:
         """Deviation from ideal shifts."""
         return self.actual_shifts - self.ideal_shifts
+
+    @property
+    def max_weekly_shifts(self) -> int:
+        """Maximum shifts in any single week."""
+        return max(self.weekly_shifts) if self.weekly_shifts else 0
 
 
 @dataclass

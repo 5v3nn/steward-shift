@@ -91,15 +91,15 @@ constraints:
 
 ### Key Configuration Options
 
-| Option | Description |
-|--------|-------------|
-| `planning.start_date` | ISO 8601 date (YYYY-MM-DD) |
-| `planning.duration_weeks` | Number of weeks to schedule |
-| `staffing_requirements` | People needed per day of week |
-| `teams.*.target_percentage` | Must sum to 1.0 |
-| `teams.*.team_day` | Day index (0=Mon, 6=Sun) when team doesn't work |
-| `employees.*.available_days` | List of day indices employee can work |
-| `constraints.max_consecutive_shifts` | Max consecutive days before penalty applies |
+| Option                               | Description                                     |
+|--------------------------------------|-------------------------------------------------|
+| `planning.start_date`                | Date (YYYY-MM-DD)                               |
+| `planning.duration_weeks`            | Number of weeks to schedule                     |
+| `staffing_requirements`              | People needed per day of week                   |
+| `teams.*.target_percentage`          | Must sum to 1.0                                 |
+| `teams.*.team_day`                   | Day index (0=Mon, 6=Sun) when team doesn't work |
+| `employees.*.available_days`         | List of day indices employee can work           |
+| `constraints.max_consecutive_shifts` | Max consecutive days before penalty applies     |
 
 ## Development
 
@@ -121,10 +121,12 @@ uv build
 
 The optimizer uses PuLP to solve a linear programming problem that:
 
-1. **Minimizes** deviation from ideal shift distribution + team target penalties + consecutive shift penalties
+1. **Minimizes** deviation from ideal shift distribution + team target
+   penalties + consecutive shift penalties
 2. **Subject to:**
    - Daily staffing requirements are met exactly
-   - Employees only assigned when available (respects part-time, vacations, team days)
+   - Employees only assigned when available (respects part-time, vacations,
+     team days)
    - Team shift totals approximate target percentages
 
 ---

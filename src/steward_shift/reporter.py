@@ -31,6 +31,7 @@ class ScheduleReporter:
             self._print_availability_summary()
             self._print_vacation_summary()
             self._print_consecutive_violations()
+            self._print_weekly_violations()
 
     def _print_title(self, title: str) -> None:
         print("=" * 80)
@@ -94,6 +95,9 @@ class ScheduleReporter:
                 )
             )
 
+            max_consec = self.result.config.max_consecutive_shifts
+            max_weekly = self.result.config.max_shifts_per_week
+
             data.append(
                 {
                     "Employee": emp_sched.employee.name,
@@ -103,7 +107,9 @@ class ScheduleReporter:
                     "Actual Shifts": emp_sched.actual_shifts,
                     "Deviation": emp_sched.deviation,
                     "Max Consecutive": emp_sched.max_consecutive,
-                    f"Violations (>{self.result.config.max_consecutive_shifts})": emp_sched.violations_count,
+                    f"Consec Viol (>{max_consec})": emp_sched.consecutive_violations,
+                    "Max Weekly": emp_sched.max_weekly_shifts,
+                    f"Weekly Viol (>{max_weekly})": emp_sched.weekly_violations,
                 }
             )
 
@@ -261,6 +267,37 @@ class ScheduleReporter:
                 violations.append((emp_sched.employee.name, emp_violations))
 
         return violations
+
+    def _print_weekly_violations(self) -> None:
+        """Print weekly shift violations."""
+        self._print_title("WEEKLY SHIFT VIOLATIONS")
+
+        max_allowed = self.result.config.max_shifts_per_week
+        has_violations = False
+
+        for emp_sched in self.result.employee_schedules:
+            weeks_with_violations = [
+                (week_idx, shifts)
+                for week_idx, shifts in enumerate(emp_sched.weekly_shifts)
+                if shifts > max_allowed
+            ]
+
+            if weeks_with_violations:
+                has_violations = True
+                print(f"\n  {emp_sched.employee.name}:")
+                for week_idx, shifts in weeks_with_violations:
+                    week_start = self.result.config.start_date + timedelta(
+                        days=week_idx * 7
+                    )
+                    print(
+                        f"    Week {week_idx + 1} ({week_start.strftime('%Y-%m-%d')}): "
+                        f"{shifts} shifts (max: {max_allowed})"
+                    )
+
+        if not has_violations:
+            print(f"\n✓ No weekly shift violations (max {max_allowed} per week)")
+
+        print()
 
     def export_to_csv(self, filepath: str) -> None:
         """Export schedule to CSV file."""

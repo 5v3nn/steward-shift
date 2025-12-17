@@ -26,6 +26,7 @@ class ShiftOptimizer:
         self.S_t = None  # Team shift count variables
         self.D_t = None  # Team deviation variables
         self.C = None  # Consecutive shift violation variables
+        self.W = None  # Weekly shift excess variables
 
     def optimize(self) -> ScheduleResult:
         """
@@ -79,6 +80,10 @@ class ShiftOptimizer:
         )
         self.C = pl.LpVariable.dicts("C", (E, D), 0, 1, pl.LpBinary)
 
+        # Weekly shift excess variables: W[employee][week] = excess shifts above max
+        weeks = range(cfg.duration_weeks)
+        self.W = pl.LpVariable.dicts("W", (E, weeks), 0, 7, pl.LpInteger)
+
         # Objective function: minimize fairness deviation + penalties
         fairness_terms = self._add_fairness_objective(E)
 
@@ -86,7 +91,9 @@ class ShiftOptimizer:
             pl.lpSum(fairness_terms)
             + cfg.penalty_team_deviation * pl.lpSum(self.D_t)
             + cfg.penalty_consecutive_shifts
-            * pl.lpSum(self.C[i][k] for i in E for k in D),
+            * pl.lpSum(self.C[i][k] for i in E for k in D)
+            + cfg.penalty_weekly_shifts
+            * pl.lpSum(self.W[i][w] for i in E for w in weeks),
             "Total Cost",
         )
 
@@ -96,6 +103,7 @@ class ShiftOptimizer:
         self._add_shift_counting_constraints(D, E, T)
         self._add_team_distribution_constraints(T)
         self._add_consecutive_shift_constraints(E, D)
+        self._add_weekly_shift_constraints(E, weeks)
 
     def _calculate_availability_matrix(self, D, E) -> Dict[str, Dict[int, int]]:
         """Calculate A[employee][day] = 1 if available, 0 otherwise."""
@@ -247,9 +255,100 @@ class ShiftOptimizer:
                         f"ConsecutiveDetect_{emp_name}_Day_{k}",
                     )
 
+    def _add_weekly_shift_constraints(self, E, weeks) -> None:
+        """Add soft constraints penalizing excess shifts per week.
+
+        For each employee and week, W[employee][week] captures the number of
+        shifts above max_shifts_per_week. The objective function penalizes
+        this excess linearly (2 extra shifts = 2x penalty).
+
+        Args:
+            E: List of employee names
+            weeks: Range of week indices
+        """
+        max_weekly = self.config.max_shifts_per_week
+
+        for emp_name in E:
+            for week_idx in weeks:
+                week_start_day = week_idx * 7
+                days_in_week = range(week_start_day, week_start_day + 7)
+
+                shifts_this_week = pl.lpSum(
+                    self.x[emp_name][day] for day in days_in_week
+                )
+
+                # W >= shifts - max captures excess; W >= 0 from variable bounds
+                # Minimization ensures W equals exactly max(0, shifts - max)
+                self.prob += (
+                    self.W[emp_name][week_idx] >= shifts_this_week - max_weekly,
+                    f"WeeklyExcess_{emp_name}_Week_{week_idx}",
+                )
+
     def _solve(self) -> None:
         """Solve the linear programming problem."""
         self.prob.solve(pl.PULP_CBC_CMD(msg=0))
+
+    def _calculate_consecutive_stats(
+        self, assigned_days: List[int], all_days: range, max_allowed: int
+    ) -> tuple[int, int]:
+        """Calculate consecutive shift statistics for an employee.
+
+        Args:
+            assigned_days: List of day indices where employee is assigned
+            all_days: Range of all days in the schedule
+            max_allowed: Maximum consecutive shifts before violation
+
+        Returns:
+            Tuple of (max_consecutive_shifts, violation_count)
+        """
+        assigned_set = set(assigned_days)
+        max_consecutive = 0
+        violations = 0
+        consecutive_count = 0
+
+        for day in all_days:
+            if day in assigned_set:
+                consecutive_count += 1
+                max_consecutive = max(max_consecutive, consecutive_count)
+            else:
+                if consecutive_count > max_allowed:
+                    violations += 1
+                consecutive_count = 0
+
+        # Check final streak
+        if consecutive_count > max_allowed:
+            violations += 1
+
+        return max_consecutive, violations
+
+    def _calculate_weekly_stats(
+        self, assigned_days: List[int], num_weeks: int, max_allowed: int
+    ) -> tuple[List[int], int]:
+        """Calculate weekly shift statistics for an employee.
+
+        Args:
+            assigned_days: List of day indices where employee is assigned
+            num_weeks: Number of weeks in the schedule
+            max_allowed: Maximum shifts per week before violation
+
+        Returns:
+            Tuple of (shifts_per_week_list, violation_count)
+        """
+        assigned_set = set(assigned_days)
+        weekly_shifts = []
+        violations = 0
+
+        for week_idx in range(num_weeks):
+            week_start = week_idx * 7
+            shifts_in_week = sum(
+                1 for day in range(week_start, week_start + 7) if day in assigned_set
+            )
+            weekly_shifts.append(shifts_in_week)
+
+            if shifts_in_week > max_allowed:
+                violations += 1
+
+        return weekly_shifts, violations
 
     def _extract_results(self) -> ScheduleResult:
         """Extract results from solved problem into ScheduleResult object."""
@@ -283,28 +382,22 @@ class ShiftOptimizer:
 
         # Extract employee schedules
         employee_schedules = []
-        max_allowed = cfg.max_consecutive_shifts
+        max_consec_allowed = cfg.max_consecutive_shifts
+        max_weekly_allowed = cfg.max_shifts_per_week
 
         for emp in cfg.employees:
             assigned_days = [k for k in D if pl.value(self.x[emp.name][k]) == 1]
             actual_shifts = len(assigned_days)
 
-            # Calculate max consecutive and violations
-            max_consecutive = 0
-            violations_count = 0
-            consecutive_count = 0
+            # Calculate consecutive stats
+            max_consecutive, consecutive_violations = self._calculate_consecutive_stats(
+                assigned_days, D, max_consec_allowed
+            )
 
-            for k in D:
-                if pl.value(self.x[emp.name][k]) == 1:
-                    consecutive_count += 1
-                    max_consecutive = max(max_consecutive, consecutive_count)
-                else:
-                    if consecutive_count > max_allowed:
-                        violations_count += 1
-                    consecutive_count = 0
-
-            if consecutive_count > max_allowed:
-                violations_count += 1
+            # Calculate weekly stats
+            weekly_shifts, weekly_violations = self._calculate_weekly_stats(
+                assigned_days, cfg.duration_weeks, max_weekly_allowed
+            )
 
             employee_schedules.append(
                 EmployeeSchedule(
@@ -313,7 +406,9 @@ class ShiftOptimizer:
                     ideal_shifts=self.ideal_shifts[emp.name],
                     actual_shifts=actual_shifts,
                     max_consecutive=max_consecutive,
-                    violations_count=violations_count,
+                    consecutive_violations=consecutive_violations,
+                    weekly_shifts=weekly_shifts,
+                    weekly_violations=weekly_violations,
                 )
             )
 

@@ -148,10 +148,12 @@ class ConfigLoader:
         penalties = raw.get("penalties", {})
         penalty_team = penalties.get("team_deviation", 10000)
         penalty_consecutive = penalties.get("consecutive_shifts", 50)
+        penalty_weekly = penalties.get("weekly_shifts", 30)
 
         # Parse constraints
         constraints = raw.get("constraints", {})
         max_consecutive = constraints.get("max_consecutive_shifts", 3)
+        max_weekly = constraints.get("max_shifts_per_week", 1)
 
         return ScheduleConfig(
             start_date=start_date,
@@ -161,7 +163,9 @@ class ConfigLoader:
             employees=employees,
             penalty_team_deviation=penalty_team,
             penalty_consecutive_shifts=penalty_consecutive,
+            penalty_weekly_shifts=penalty_weekly,
             max_consecutive_shifts=max_consecutive,
+            max_shifts_per_week=max_weekly,
         )
 
     def _parse_staffing_requirements(

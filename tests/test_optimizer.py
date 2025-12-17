@@ -165,7 +165,7 @@ class TestConsecutiveShiftConstraint:
         # Working 5 consecutive days with max=2 means violations
         assert solo.actual_shifts == 5
         assert solo.max_consecutive == 5
-        assert solo.violations_count > 0
+        assert solo.consecutive_violations > 0
 
 
 class TestFairnessObjective:
@@ -218,6 +218,92 @@ class TestFairnessObjective:
         assert full_time.ideal_shifts > part_time.ideal_shifts
         ratio = full_time.ideal_shifts / part_time.ideal_shifts
         assert 2.0 <= ratio <= 3.0, f"Expected ratio ~2.5, got {ratio:.2f}"
+
+
+class TestWeeklyShiftConstraint:
+    """Tests for weekly shift soft constraint."""
+
+    @pytest.mark.parametrize("max_weekly", [1, 2, 3, 4, 5])
+    def test_max_weekly_is_configurable(self, max_weekly: int):
+        """Different max_shifts_per_week values are applied."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="E1", team="T", available_days=[0, 1, 2, 3, 4]),
+                Employee(name="E2", team="T", available_days=[0, 1, 2, 3, 4]),
+            ],
+            max_shifts_per_week=max_weekly,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        assert result.is_optimal
+        assert result.config.max_shifts_per_week == max_weekly
+
+    def test_weekly_shifts_tracked_per_week(self):
+        """Weekly shifts list has correct length and values."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=3,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Solo", team="T", available_days=[0]),
+            ],
+            max_shifts_per_week=1,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        solo = result.get_employee_schedule("Solo")
+        # 3 weeks, 1 shift per week (Monday only)
+        assert len(solo.weekly_shifts) == 3
+        assert solo.weekly_shifts == [1, 1, 1]
+        assert solo.weekly_violations == 0
+
+    def test_weekly_violations_counted_correctly(self):
+        """Violations are counted when weekly shifts exceed max."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=1,
+            staffing_requirements={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                # Only one employee - must work all 5 days in the week
+                Employee(name="Solo", team="T", available_days=[0, 1, 2, 3, 4]),
+            ],
+            max_shifts_per_week=2,  # Low limit to force violations
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        solo = result.get_employee_schedule("Solo")
+        assert solo.weekly_shifts == [5]
+        assert solo.weekly_violations == 1
+        assert solo.max_weekly_shifts == 5
+
+    def test_weekly_constraint_influences_distribution(self):
+        """With low max_shifts_per_week, shifts spread across employees."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=1,
+            staffing_requirements={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="E1", team="T", available_days=[0, 1, 2, 3, 4]),
+                Employee(name="E2", team="T", available_days=[0, 1, 2, 3, 4]),
+                Employee(name="E3", team="T", available_days=[0, 1, 2, 3, 4]),
+                Employee(name="E4", team="T", available_days=[0, 1, 2, 3, 4]),
+                Employee(name="E5", team="T", available_days=[0, 1, 2, 3, 4]),
+            ],
+            max_shifts_per_week=1,
+            penalty_weekly_shifts=1000,  # High penalty to enforce constraint
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        # With 5 employees and 5 shifts, max_weekly=1 should spread evenly
+        for emp_sched in result.employee_schedules:
+            assert emp_sched.max_weekly_shifts <= 1
 
 
 class TestEdgeCases:

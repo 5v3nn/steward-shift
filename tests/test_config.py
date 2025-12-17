@@ -333,6 +333,105 @@ constraints:
         config = ConfigLoader(path).load()
         assert config.max_consecutive_shifts == max_consec
 
+    def test_default_max_shifts_per_week(self):
+        """Default max_shifts_per_week is 1 when not specified."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.max_shifts_per_week == 1
+
+    @pytest.mark.parametrize("max_weekly", [1, 2, 3, 5])
+    def test_custom_max_shifts_per_week(self, max_weekly: int):
+        """max_shifts_per_week can be set via constraints section."""
+        yaml = f"""
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+
+constraints:
+  max_shifts_per_week: {max_weekly}
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.max_shifts_per_week == max_weekly
+
+    def test_default_penalty_weekly_shifts(self):
+        """Default penalty_weekly_shifts is 30 when not specified."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.penalty_weekly_shifts == 30
+
+    def test_custom_penalty_weekly_shifts(self):
+        """penalty_weekly_shifts can be set via penalties section."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+
+penalties:
+  weekly_shifts: 100
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.penalty_weekly_shifts == 100
+
 
 class TestVacationParsing:
     """Tests for vacation period parsing."""
