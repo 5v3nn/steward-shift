@@ -19,7 +19,10 @@ schedules, team distributions, and consecutive shift limits.
   a day in the week when they coordinate, thus should not be considered for the
   shift)
 - **Consecutive shift limits** - Prevent too many shifts in a row
-- **CSV export** - Export schedules for calendar integration
+- **Weekly shift limits** - Prefer max N shifts per week
+- **Day rotation** - Prevent same person working same day-of-week in consecutive
+  weeks (denoted as "same day violation")
+- **CSV export** - Export schedules for calendar integration (TODO)
 
 ## Installation
 
@@ -84,22 +87,28 @@ employees:
 penalties:
   team_deviation: 10000  # High = near-hard constraint
   consecutive_shifts: 50  # Moderate = soft constraint
+  weekly_shifts: 30  # Penalty for exceeding max shifts per week
+  same_day_consecutive_weeks: 10  # Penalty for same day in back-to-back weeks
 
 constraints:
   max_consecutive_shifts: 3  # Penalize working more than 3 days in a row
+  max_shifts_per_week: 1  # Ideal max shifts per week
+  prevent_same_day_consecutive_weeks: true  # Rotate day-of-week assignments
 ```
 
 ### Key Configuration Options
 
-| Option                               | Description                                     |
-|--------------------------------------|-------------------------------------------------|
-| `planning.start_date`                | Date (YYYY-MM-DD)                               |
-| `planning.duration_weeks`            | Number of weeks to schedule                     |
-| `staffing_requirements`              | People needed per day of week                   |
-| `teams.*.target_percentage`          | Must sum to 1.0                                 |
-| `teams.*.team_day`                   | Day index (0=Mon, 6=Sun) when team doesn't work |
-| `employees.*.available_days`         | List of day indices employee can work           |
-| `constraints.max_consecutive_shifts` | Max consecutive days before penalty applies     |
+| Option                                        | Description                                        |
+|-----------------------------------------------|----------------------------------------------------|
+| `planning.start_date`                         | Date (YYYY-MM-DD)                                  |
+| `planning.duration_weeks`                     | Number of weeks to schedule                        |
+| `staffing_requirements`                       | People needed per day of week                      |
+| `teams.*.target_percentage`                   | Must sum to 1.0                                    |
+| `teams.*.team_day`                            | Day index (0=Mon, 6=Sun) when team doesn't work    |
+| `employees.*.available_days`                  | List of day indices employee can work              |
+| `constraints.max_consecutive_shifts`          | Max consecutive days before penalty applies        |
+| `constraints.max_shifts_per_week`             | Ideal max shifts per week (soft)                   |
+| `constraints.prevent_same_day_consecutive_weeks` | Penalize same day-of-week in back-to-back weeks |
 
 ## Development
 
@@ -122,12 +131,25 @@ uv build
 The optimizer uses PuLP to solve a linear programming problem that:
 
 1. **Minimizes** deviation from ideal shift distribution + team target
-   penalties + consecutive shift penalties
+   penalties + consecutive shift penalties + weekly shift penalties +
+   same-day-consecutive-week penalties
 2. **Subject to:**
    - Daily staffing requirements are met exactly
    - Employees only assigned when available (respects part-time, vacations,
      team days)
    - Team shift totals approximate target percentages
+
+### Soft Constraints
+
+The following are **soft constraints** (penalized, not forbidden):
+
+| Constraint                 | What it prevents                       | Default    |
+|----------------------------|----------------------------------------|------------|
+| Consecutive shifts         | Working too many days in a row         | max 3      |
+| Weekly shifts              | Working too often in one week          | max 1/week |
+| Same day consecutive weeks | Working e.g. Monday two weeks in a row | enabled    |
+
+Higher penalty values make constraints stricter. Set penalty to 0 to disable.
 
 ---
 
