@@ -89,8 +89,12 @@ class ScheduleConfig:
     penalty_team_deviation: float = 10000
     penalty_consecutive_shifts: float = 50
     penalty_weekly_shifts: float = 30  # Penalty for exceeding max shifts per week
+    penalty_same_day_consecutive_weeks: float = (
+        10  # Penalty for same day in back-to-back weeks
+    )
     max_consecutive_shifts: int = 3  # Max consecutive days before penalty
     max_shifts_per_week: int = 1  # Ideal max shifts per week before penalty
+    prevent_same_day_consecutive_weeks: bool = True  # Enable day rotation constraint
 
     @property
     def total_days(self) -> int:
@@ -126,6 +130,9 @@ class EmployeeSchedule:
     consecutive_violations: int  # Number of times exceeded max consecutive shifts
     weekly_shifts: List[int]  # Shifts per week [week0, week1, ...]
     weekly_violations: int  # Number of weeks exceeding max shifts per week
+    same_day_consecutive_weeks_violations: (
+        int  # Times same day-of-week in back-to-back weeks
+    )
 
     @property
     def deviation(self) -> float:

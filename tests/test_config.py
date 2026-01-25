@@ -432,6 +432,104 @@ penalties:
         config = ConfigLoader(path).load()
         assert config.penalty_weekly_shifts == 100
 
+    def test_default_prevent_same_day_consecutive_weeks(self):
+        """Default prevent_same_day_consecutive_weeks is True."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.prevent_same_day_consecutive_weeks is True
+
+    def test_prevent_same_day_can_be_disabled(self):
+        """prevent_same_day_consecutive_weeks can be set to false."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+
+constraints:
+  prevent_same_day_consecutive_weeks: false
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.prevent_same_day_consecutive_weeks is False
+
+    def test_default_penalty_same_day_consecutive_weeks(self):
+        """Default penalty_same_day_consecutive_weeks is 10."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.penalty_same_day_consecutive_weeks == 10
+
+    def test_custom_penalty_same_day_consecutive_weeks(self):
+        """penalty_same_day_consecutive_weeks can be customized."""
+        yaml = """
+planning:
+  start_date: 2026-01-05
+  duration_weeks: 1
+
+staffing_requirements:
+  monday: 1
+
+teams:
+  TeamA:
+    target_percentage: 1.0
+
+employees:
+  - name: Alice
+    team: TeamA
+    available_days: [0]
+
+penalties:
+  same_day_consecutive_weeks: 50
+"""
+        path = write_yaml(yaml)
+        config = ConfigLoader(path).load()
+        assert config.penalty_same_day_consecutive_weeks == 50
+
 
 class TestVacationParsing:
     """Tests for vacation period parsing."""

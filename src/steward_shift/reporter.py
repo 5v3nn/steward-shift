@@ -32,6 +32,7 @@ class ScheduleReporter:
             self._print_vacation_summary()
             self._print_consecutive_violations()
             self._print_weekly_violations()
+            self._print_same_day_consecutive_weeks_violations()
 
     def _print_title(self, title: str) -> None:
         print("=" * 80)
@@ -110,6 +111,7 @@ class ScheduleReporter:
                     f"Consec Viol (>{max_consec})": emp_sched.consecutive_violations,
                     "Max Weekly": emp_sched.max_weekly_shifts,
                     f"Weekly Viol (>{max_weekly})": emp_sched.weekly_violations,
+                    "Same Day Viol": emp_sched.same_day_consecutive_weeks_violations,
                 }
             )
 
@@ -296,6 +298,51 @@ class ScheduleReporter:
 
         if not has_violations:
             print(f"\n✓ No weekly shift violations (max {max_allowed} per week)")
+
+        print()
+
+    def _print_same_day_consecutive_weeks_violations(self) -> None:
+        """Print same day consecutive weeks violations."""
+        if not self.result.config.prevent_same_day_consecutive_weeks:
+            return
+
+        self._print_title("SAME DAY CONSECUTIVE WEEKS VIOLATIONS")
+
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        has_violations = False
+
+        for emp_sched in self.result.employee_schedules:
+            if emp_sched.same_day_consecutive_weeks_violations == 0:
+                continue
+
+            has_violations = True
+            print(f"\n  {emp_sched.employee.name}:")
+
+            # Find specific violations
+            assigned_set = set(emp_sched.assigned_days)
+            num_weeks = self.result.config.duration_weeks
+            start_weekday = self.result.config.start_date.weekday()
+
+            for week_idx in range(num_weeks - 1):
+                for day_offset in range(7):
+                    day_w = week_idx * 7 + day_offset
+                    day_w_plus_1 = (week_idx + 1) * 7 + day_offset
+
+                    if day_w in assigned_set and day_w_plus_1 in assigned_set:
+                        date_w = self.result.config.start_date + timedelta(days=day_w)
+                        date_w_plus_1 = self.result.config.start_date + timedelta(
+                            days=day_w_plus_1
+                        )
+                        # Convert offset to actual weekday
+                        actual_weekday = (start_weekday + day_offset) % 7
+                        print(
+                            f"    {day_names[actual_weekday]}: "
+                            f"Week {week_idx + 1} ({date_w.strftime('%Y-%m-%d')}) and "
+                            f"Week {week_idx + 2} ({date_w_plus_1.strftime('%Y-%m-%d')})"
+                        )
+
+        if not has_violations:
+            print("\n✓ No same day consecutive weeks violations")
 
         print()
 

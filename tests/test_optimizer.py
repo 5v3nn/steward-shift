@@ -3,7 +3,7 @@
 import pytest
 from datetime import date
 
-from steward_shift.models import Employee, Team, ScheduleConfig
+from steward_shift.models import Employee, Team, ScheduleConfig, VacationPeriod
 from steward_shift.optimizer import ShiftOptimizer
 
 
@@ -304,6 +304,374 @@ class TestWeeklyShiftConstraint:
         # With 5 employees and 5 shifts, max_weekly=1 should spread evenly
         for emp_sched in result.employee_schedules:
             assert emp_sched.max_weekly_shifts <= 1
+
+
+class TestSameDayConsecutiveWeeksConstraint:
+    """Tests for same day consecutive weeks soft constraint."""
+
+    def test_constraint_enabled_by_default(self):
+        """Constraint is enabled by default."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="E1", team="T", available_days=[0]),
+            ],
+        )
+        assert config.prevent_same_day_consecutive_weeks is True
+
+    def test_constraint_can_be_disabled(self):
+        """Constraint can be disabled via config."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="E1", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=False,
+        )
+        result = ShiftOptimizer(config).optimize()
+        assert result.is_optimal
+
+    def test_violations_counted_correctly(self):
+        """Violations are counted when same day in consecutive weeks."""
+        # One employee available only on Monday - must work Monday both weeks
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Solo", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        solo = result.get_employee_schedule("Solo")
+        # Must work Monday both weeks = 1 violation
+        assert solo.same_day_consecutive_weeks_violations == 1
+
+    def test_no_violations_when_different_days(self):
+        """No violations when working different days each week."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 1, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="E1", team="T", available_days=[0, 1]),
+                Employee(name="E2", team="T", available_days=[0, 1]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=1000,  # High penalty
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        # With high penalty and enough employees, should avoid same-day violations
+        total_violations = sum(
+            es.same_day_consecutive_weeks_violations for es in result.employee_schedules
+        )
+        assert total_violations == 0
+
+    def test_constraint_influences_assignment(self):
+        """With high penalty, optimizer avoids same-day consecutive weeks."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="E1", team="T", available_days=[0]),
+                Employee(name="E2", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=1000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        # With 2 employees available Monday, optimizer should assign different
+        # employee each week to avoid same-day violation
+        e1 = result.get_employee_schedule("E1")
+        e2 = result.get_employee_schedule("E2")
+
+        # Each should work exactly 1 Monday (not the same person both weeks)
+        assert e1.actual_shifts == 1
+        assert e2.actual_shifts == 1
+
+    def test_single_week_no_violations(self):
+        """Single week schedules have no same-day consecutive week violations."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=1,
+            staffing_requirements={0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Solo", team="T", available_days=[0, 1, 2, 3, 4]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        solo = result.get_employee_schedule("Solo")
+        assert solo.same_day_consecutive_weeks_violations == 0
+
+    def test_disabled_constraint_allows_same_day_assignments(self):
+        """When disabled, optimizer freely assigns same day in consecutive weeks."""
+        # Two employees, but E1 is preferred due to higher availability
+        # With constraint disabled, optimizer may assign same person both weeks
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Solo", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=False,
+        )
+        optimizer = ShiftOptimizer(config)
+
+        # Verify R variables are not created when constraint is disabled
+        assert optimizer.R is None
+
+        result = optimizer.optimize()
+        assert result.is_optimal
+
+        # Solo must work both Mondays (only person available)
+        solo = result.get_employee_schedule("Solo")
+        assert solo.actual_shifts == 2
+        assert 0 in solo.assigned_days  # Week 1 Monday
+        assert 7 in solo.assigned_days  # Week 2 Monday
+        # Violations still counted for reporting, but no penalty applied
+        assert solo.same_day_consecutive_weeks_violations == 1
+
+    def test_rotation_when_multiple_employees_available(self):
+        """With 2 employees for 1 Monday slot, they should alternate weeks."""
+        # This is the key test: when rotation IS possible, it MUST happen
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Alice", team="T", available_days=[0]),
+                Employee(name="Bob", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,  # Very high penalty
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        alice = result.get_employee_schedule("Alice")
+        bob = result.get_employee_schedule("Bob")
+
+        # Each should work exactly 1 shift (rotation)
+        assert alice.actual_shifts == 1
+        assert bob.actual_shifts == 1
+
+        # No violations - they alternated
+        assert alice.same_day_consecutive_weeks_violations == 0
+        assert bob.same_day_consecutive_weeks_violations == 0
+
+        # Verify they work different weeks
+        alice_days = set(alice.assigned_days)
+        bob_days = set(bob.assigned_days)
+        assert alice_days.isdisjoint(bob_days)
+
+    def test_forced_violation_when_no_alternative(self):
+        """When only one employee is available, violation is unavoidable."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                # Only Alice available on Monday
+                Employee(name="Alice", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        alice = result.get_employee_schedule("Alice")
+
+        # Must work both Mondays - no choice
+        assert alice.actual_shifts == 2
+        assert 0 in alice.assigned_days  # Week 1 Monday
+        assert 7 in alice.assigned_days  # Week 2 Monday
+        assert alice.same_day_consecutive_weeks_violations == 1
+
+    def test_three_week_rotation(self):
+        """With 3 weeks and 3 employees, each works once with no violations."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=3,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Alice", team="T", available_days=[0]),
+                Employee(name="Bob", team="T", available_days=[0]),
+                Employee(name="Carol", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        # Each works exactly 1 Monday
+        for emp_sched in result.employee_schedules:
+            assert emp_sched.actual_shifts == 1
+            assert emp_sched.same_day_consecutive_weeks_violations == 0
+
+        # All three Mondays are covered by different people
+        all_assigned = []
+        for emp_sched in result.employee_schedules:
+            all_assigned.extend(emp_sched.assigned_days)
+        assert sorted(all_assigned) == [0, 7, 14]  # Mon week 1, 2, 3
+
+    def test_three_weeks_two_employees_no_violation_possible(self):
+        """With 3 weeks and 2 employees, alternating pattern avoids violations."""
+        # Pattern A-B-A or B-A-B means no consecutive weeks with same person
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=3,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Alice", team="T", available_days=[0]),
+                Employee(name="Bob", team="T", available_days=[0]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        total_violations = sum(
+            es.same_day_consecutive_weeks_violations for es in result.employee_schedules
+        )
+
+        # Pattern A-B-A means: week1-week2 different, week2-week3 different
+        # No consecutive weeks have the same person!
+        assert total_violations == 0
+
+        # Verify shifts: one person works twice, the other once
+        shifts = [es.actual_shifts for es in result.employee_schedules]
+        assert sorted(shifts) == [1, 2]
+
+    def test_forced_consecutive_violation_via_vacation(self):
+        """Vacation in middle week forces same person to work consecutive weeks."""
+        # Week 1: Alice or Bob available
+        # Week 2: Only Alice available (Bob on vacation)
+        # Week 3: Only Alice available (Bob on vacation)
+        # Alice must work weeks 2 and 3 = 1 violation
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=3,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Alice", team="T", available_days=[0]),
+                Employee(
+                    name="Bob",
+                    team="T",
+                    available_days=[0],
+                    # Bob on vacation weeks 2 and 3 (Mon Jan 12 and Mon Jan 19)
+                    vacations=[
+                        VacationPeriod(start=date(2026, 1, 12), end=date(2026, 1, 19))
+                    ],
+                ),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        alice = result.get_employee_schedule("Alice")
+        bob = result.get_employee_schedule("Bob")
+
+        # Bob works week 1 (only week he's available)
+        assert bob.actual_shifts == 1
+        assert 0 in bob.assigned_days
+
+        # Alice must work weeks 2 and 3
+        assert alice.actual_shifts == 2
+        assert 7 in alice.assigned_days  # Week 2 Monday
+        assert 14 in alice.assigned_days  # Week 3 Monday
+
+        # Alice has 1 violation (same day weeks 2 and 3)
+        assert alice.same_day_consecutive_weeks_violations == 1
+        assert bob.same_day_consecutive_weeks_violations == 0
+
+    def test_independent_days_dont_interfere(self):
+        """Violations on Monday don't affect Tuesday rotation."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 1, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                # Alice only available Monday - forced violation
+                Employee(name="Alice", team="T", available_days=[0]),
+                # Bob and Carol available Tuesday - can rotate
+                Employee(name="Bob", team="T", available_days=[1]),
+                Employee(name="Carol", team="T", available_days=[1]),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        alice = result.get_employee_schedule("Alice")
+        bob = result.get_employee_schedule("Bob")
+        carol = result.get_employee_schedule("Carol")
+
+        # Alice has forced Monday violation
+        assert alice.same_day_consecutive_weeks_violations == 1
+
+        # Bob and Carol rotate Tuesdays - no violations
+        assert bob.same_day_consecutive_weeks_violations == 0
+        assert carol.same_day_consecutive_weeks_violations == 0
+        assert bob.actual_shifts == 1
+        assert carol.actual_shifts == 1
+
+    def test_partial_availability_prevents_rotation(self):
+        """Employee unavailable in week 2 forces same-day assignment."""
+        config = ScheduleConfig(
+            start_date=date(2026, 1, 5),  # Monday
+            duration_weeks=2,
+            staffing_requirements={0: 1, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+            teams=[Team(name="T", target_percentage=1.0)],
+            employees=[
+                Employee(name="Alice", team="T", available_days=[0]),
+                # Bob is on vacation week 2 (Mon Jan 12)
+                Employee(
+                    name="Bob",
+                    team="T",
+                    available_days=[0],
+                    vacations=[
+                        VacationPeriod(start=date(2026, 1, 12), end=date(2026, 1, 18))
+                    ],
+                ),
+            ],
+            prevent_same_day_consecutive_weeks=True,
+            penalty_same_day_consecutive_weeks=10000,
+        )
+        result = ShiftOptimizer(config).optimize()
+
+        # Bob works week 1, Alice must work week 2 (Bob on vacation)
+        # If Bob works week 1 and Alice works week 2, no violation
+        # (different people on same day = no violation)
+        total_violations = sum(
+            es.same_day_consecutive_weeks_violations for es in result.employee_schedules
+        )
+        # Should be 0 - Bob week 1, Alice week 2 (different people)
+        assert total_violations == 0
 
 
 class TestEdgeCases:

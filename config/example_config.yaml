@@ -59,6 +59,10 @@ employees:
 penalties:
   team_deviation: 10000  # High penalty - near-hard constraint
   consecutive_shifts: 50  # Moderate penalty - soft constraint
+  weekly_shifts: 30  # Penalty for exceeding max shifts per week
+  same_day_consecutive_weeks: 10  # Penalty for same day in back-to-back weeks
 
 constraints:
   max_consecutive_shifts: 3  # Maximum allowed consecutive shifts before penalty
+  max_shifts_per_week: 1  # Ideal max shifts per week (soft constraint)
+  prevent_same_day_consecutive_weeks: true  # Rotate day-of-week assignments
