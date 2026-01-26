@@ -265,7 +265,7 @@ $$R_{iwd} \geq x_{i,7w+d} + x_{i,7(w+1)+d} - 1 \quad \forall i \in E, w \in \{0,
 
 The ideal shifts $\hat{S}_i$ for employee $i$ in team $t$ is calculated as:
 
-$$\hat{S}_i = \frac{\text{available\_days}_i}{\sum_{j \in E_t} \text{available\_days}_j} \cdot p_t \cdot M$$
+$$\hat{S}_i = \frac{\text{availableDays}_i}{\sum_{j \in E_t} \text{availableDays}_j} \cdot p_t \cdot M$$
 
 This distributes the team's target shifts proportionally based on each employee's availability.
 
