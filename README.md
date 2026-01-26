@@ -169,28 +169,114 @@ uv run pytest tests/test_file.py::test_name
 uv build
 ```
 
-## How It Works
+## Mathematical Model
 
-The optimizer uses PuLP to solve a linear programming problem that:
+The optimizer uses PuLP to solve a Mixed Integer Linear Program (MILP).
 
-1. **Minimizes** deviation from ideal shift distribution + team target
-   penalties + consecutive shift penalties + weekly shift penalties +
-   same-day-consecutive-week penalties
-2. **Subject to:**
-   - Daily staffing requirements are met exactly
-   - Employees only assigned when available (respects part-time, vacations,
-     team days)
-   - Team shift totals approximate target percentages
+### Sets and Indices
 
-### Soft Constraints
+| Symbol | Description |
+|--------|-------------|
+| $E$ | Set of employees |
+| $T$ | Set of teams |
+| $D = \{0, 1, \ldots, n-1\}$ | Set of days in planning period |
+| $W = \{0, 1, \ldots, w-1\}$ | Set of weeks |
+| $i \in E$ | Employee index |
+| $t \in T$ | Team index |
+| $k \in D$ | Day index |
+| $w \in W$ | Week index |
 
-The following are **soft constraints** (penalized, not forbidden):
+### Parameters
 
-| Constraint                 | What it prevents                       | Default    |
-|----------------------------|----------------------------------------|------------|
-| Consecutive shifts         | Working too many days in a row         | max 3      |
-| Weekly shifts              | Working too often in one week          | max 1/week |
-| Same day consecutive weeks | Working e.g. Monday two weeks in a row | enabled    |
+| Symbol | Description |
+|--------|-------------|
+| $A_{ik}$ | Availability: 1 if employee $i$ can work on day $k$, 0 otherwise |
+| $r_k$ | Required staff on day $k$ |
+| $p_t$ | Target percentage for team $t$ (must sum to 1) |
+| $\hat{S}_i$ | Ideal shifts for employee $i$ (calculated from availability) |
+| $M$ | Total shifts required: $M = \sum_{k \in D} r_k$ |
+| $\kappa$ | Max consecutive shifts before penalty |
+| $\mu$ | Max weekly shifts before penalty |
+| $\alpha$ | Penalty weight for team deviation |
+| $\beta$ | Penalty weight for consecutive shifts |
+| $\gamma$ | Penalty weight for weekly excess |
+| $\delta$ | Penalty weight for same-day consecutive weeks |
+
+### Decision Variables
+
+| Variable | Domain | Description |
+|----------|--------|-------------|
+| $x_{ik}$ | $\{0, 1\}$ | 1 if employee $i$ works on day $k$ |
+| $S_i$ | $\mathbb{Z}^+$ | Total shifts assigned to employee $i$ |
+| $S_t$ | $\mathbb{R}^+$ | Total shifts assigned to team $t$ |
+| $D_t$ | $\mathbb{R}^+$ | Absolute deviation from team target |
+| $Z_i$ | $\mathbb{R}^+$ | Absolute deviation from ideal shifts for employee $i$ |
+| $C_{ik}$ | $\{0, 1\}$ | 1 if consecutive violation starts at day $k$ for employee $i$ |
+| $W_{iw}$ | $\mathbb{Z}^+$ | Excess shifts above max in week $w$ for employee $i$ |
+| $R_{iwd}$ | $\{0, 1\}$ | 1 if employee $i$ works day-of-week $d$ in both weeks $w$ and $w+1$ |
+
+### Objective Function
+
+$$\min \sum_{i \in E} Z_i + \alpha \sum_{t \in T} D_t + \beta \sum_{i \in E} \sum_{k \in D} C_{ik} + \gamma \sum_{i \in E} \sum_{w \in W} W_{iw} + \delta \sum_{i \in E} \sum_{w=0}^{|W|-2} \sum_{d=0}^{6} R_{iwd}$$
+
+### Hard Constraints
+
+**Staffing requirements** — exactly $r_k$ employees must work each day:
+
+$$\sum_{i \in E} x_{ik} = r_k \quad \forall k \in D$$
+
+**Availability** — employees can only work when available:
+
+$$x_{ik} = 0 \quad \forall i \in E, k \in D : A_{ik} = 0$$
+
+**Shift counting** — link assignments to totals:
+
+$$S_i = \sum_{k \in D} x_{ik} \quad \forall i \in E$$
+
+$$S_t = \sum_{i \in E_t} S_i \quad \forall t \in T$$
+
+where $E_t$ is the set of employees in team $t$.
+
+### Soft Constraints (Penalized)
+
+**Fairness** — minimize deviation from ideal shifts:
+
+$$Z_i \geq \hat{S}_i - S_i \quad \forall i \in E$$
+$$Z_i \geq S_i - \hat{S}_i \quad \forall i \in E$$
+
+**Team distribution** — minimize deviation from target percentages:
+
+$$D_t \geq p_t \cdot M - S_t \quad \forall t \in T$$
+$$D_t \geq S_t - p_t \cdot M \quad \forall t \in T$$
+
+**Consecutive shifts** — detect when $\kappa + 1$ consecutive days are worked:
+
+$$C_{ik} \geq \sum_{j=0}^{\kappa} x_{i,k+j} - \kappa \quad \forall i \in E, k \in D : k + \kappa < n$$
+
+**Weekly shifts** — capture excess above maximum per week:
+
+$$W_{iw} \geq \sum_{k=7w}^{7w+6} x_{ik} - \mu \quad \forall i \in E, w \in W$$
+
+**Same-day consecutive weeks** — detect same day-of-week in back-to-back weeks:
+
+$$R_{iwd} \geq x_{i,7w+d} + x_{i,7(w+1)+d} - 1 \quad \forall i \in E, w \in \{0, \ldots, |W|-2\}, d \in \{0, \ldots, 6\}$$
+
+### Ideal Shifts Calculation
+
+The ideal shifts $\hat{S}_i$ for employee $i$ in team $t$ is calculated as:
+
+$$\hat{S}_i = \frac{\text{available\_days}_i}{\sum_{j \in E_t} \text{available\_days}_j} \cdot p_t \cdot M$$
+
+This distributes the team's target shifts proportionally based on each employee's availability.
+
+### Soft Constraints Summary
+
+| Constraint | What it prevents | Default | Penalty |
+|------------|------------------|---------|---------|
+| Consecutive shifts | Working > $\kappa$ days in a row | $\kappa = 3$ | $\beta = 50$ |
+| Weekly shifts | Working > $\mu$ times per week | $\mu = 1$ | $\gamma = 30$ |
+| Same-day consecutive weeks | Same weekday two weeks in a row | enabled | $\delta = 10$ |
+| Team deviation | Missing team percentage targets | — | $\alpha = 10000$ |
 
 Higher penalty values make constraints stricter. Set penalty to 0 to disable.
 
