@@ -6,6 +6,7 @@ import sys
 import argparse
 
 from .config import ConfigLoader, ConfigurationError, InvalidDateFormatError
+from .exporters import MatrixCSVExporter
 from .optimizer import ShiftOptimizer
 from .reporter import ScheduleReporter
 
@@ -29,8 +30,16 @@ Examples:
         """,
     )
 
-    parser.add_argument("config", type=str, help="Path to YAML configuration file")
-    parser.add_argument("--export-csv", type=str, help="Export schedule to CSV file")
+    parser.add_argument(
+        "config",
+        type=str,
+        help="Path to YAML configuration file",
+        metavar="CONFIG-PATH",
+    )
+
+    parser.add_argument(
+        "--export-csv", type=str, help="Export schedule to CSV file", metavar="CSV-PATH"
+    )
     parser.add_argument(
         "--quiet",
         action="store_true",
@@ -67,7 +76,8 @@ Examples:
 
         # Export to CSV if requested
         if args.export_csv:
-            reporter.export_to_csv(args.export_csv)
+            exporter = MatrixCSVExporter(result)
+            exporter.export(args.export_csv)
 
         # Exit with appropriate code
         sys.exit(0 if result.is_optimal else 1)

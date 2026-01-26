@@ -345,21 +345,3 @@ class ScheduleReporter:
             print("\n✓ No same day consecutive weeks violations")
 
         print()
-
-    def export_to_csv(self, filepath: str) -> None:
-        """Export schedule to CSV file."""
-        data = []
-
-        for assignment in self.result.daily_assignments:
-            for emp_name in assignment.employees:
-                data.append(
-                    {
-                        "Date": assignment.date,
-                        "Day_of_Week": assignment.day_of_week,
-                        "Employee": emp_name,
-                    }
-                )
-
-        df = pd.DataFrame(data)
-        df.to_csv(filepath, index=False)
-        print(f"\n✓ Schedule exported to {filepath}")

@@ -22,7 +22,7 @@ schedules, team distributions, and consecutive shift limits.
 - **Weekly shift limits** - Prefer max N shifts per week
 - **Day rotation** - Prevent same person working same day-of-week in consecutive
   weeks (denoted as "same day violation")
-- **CSV export** - Export schedules for calendar integration (TODO)
+- **CSV export** - Export schedules in matrix format for Excel/Google Sheets
 
 ## Installation
 
@@ -47,9 +47,11 @@ steward-shift config/schedule.yaml --quiet
 steward-shift config/schedule.yaml --export-csv output.csv
 ```
 
+
 ## Configuration
 
-Configuration is done via YAML. See `config/mgb_config.yaml` for a complete example.
+Configuration is done via YAML. See `config/example_config.yaml` for a complete
+example.
 
 ```yaml
 planning:
@@ -109,6 +111,47 @@ constraints:
 | `constraints.max_consecutive_shifts`          | Max consecutive days before penalty applies        |
 | `constraints.max_shifts_per_week`             | Ideal max shifts per week (soft)                   |
 | `constraints.prevent_same_day_consecutive_weeks` | Penalize same day-of-week in back-to-back weeks |
+
+
+## CSV Export
+
+The `--export-csv` flag exports the schedule in a matrix format optimized for
+Excel and Google Sheets:
+
+```csv
+Employee,2026-01-05 Mon,2026-01-06 Tue,2026-01-07 Wed
+--- Engineering ---,,,
+Alice,X,,X
+Bob,,X,
+--- Support ---,,,
+Carol,X,,
+Dan,,X,X
+TOTAL,=COUNTIF(B2:B6,"X"),=COUNTIF(C2:C6,"X"),=COUNTIF(D2:D6,"X")
+```
+
+
+| Employee            | 2026-01-05 Mon      | 2026-01-06 Tue      | 2026-01-07 Wed      |
+|---------------------|---------------------|---------------------|---------------------|
+| --- Engineering --- |                     |                     |                     |
+| Alice               | X                   |                     | X                   |
+| Bob                 |                     | X                   |                     |
+| --- Support ---     |                     |                     |                     |
+| Carol               | X                   |                     |                     |
+| Dan                 |                     | X                   | X                   |
+|---------------------|---------------------|---------------------|---------------------|
+| TOTAL               | =COUNTIF(B2:B6,"X") | =COUNTIF(C2:C6,"X") | =COUNTIF(D2:D6,"X") |
+
+
+### Format Features
+
+| Feature                  | Description                                |
+|--------------------------|--------------------------------------------|
+| **Matrix layout**        | Employees as rows, dates as columns        |
+| **Team grouping**        | Employees grouped by team with header rows |
+| **Alphabetical sorting** | Employees sorted A-Z within each team      |
+| **Shift markers**        | `X` indicates an assigned shift            |
+| **TOTAL row**            | Excel COUNTIF formulas for column sums     |
+
 
 ## Development
 
